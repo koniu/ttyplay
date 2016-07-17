@@ -29,12 +29,11 @@
 #include <strings.h>
 #include <sndfile.h>
 #include <samplerate.h>
+#include <string.h>
 
 #define SOUND_BUFFER_LEN (0.25) // seconds
 #define BAUDRATE 115200
 #define SERIAL_BAUDRATE B115200
-#define SERIAL_DEVICE "/dev/ttyS0"
-#define OUTPUT_SAMPLERATE 48000
 
 int main(int argc, char **argv) {  
   
@@ -64,23 +63,52 @@ int main(int argc, char **argv) {
 
   info.format=0;
 
-  if ((argc < 2) || (argc>3)) {
-    fprintf(stderr,"Use like this:\n %s in.wav [out.wav] \n\n\
- Output will go to %s\n\n\
- Specify out.wav to simulate the output instead.\n",argv[0],SERIAL_DEVICE);
-    return 1;
+  int quiet = 0;
+  char device[128];
+  char outfile[1024];
+  char infile[1024];
+  char output[1024];
+  int rate = 48000;
+
+  strcpy(device, "/dev/ttyS0");
+  strcpy(output, device);
+
+  int opt;
+  while ((opt = getopt(argc, argv, "qd:r:w:")) != -1) {
+    switch(opt) {
+      case 'd':
+        strcpy(device, optarg);
+        strcpy(output, device);
+        break;
+      case 'r':
+        rate = atoi(optarg);
+        break;
+      case 'w':
+        strcpy(outfile, optarg);
+        strcpy(output, outfile);
+        break;
+      case 'q':
+        quiet = 1;
+        break;
+    }
   }
 
-  fprintf(stderr,"Playing %s\n",argv[1]);
-  
-  soundfile=sf_open(argv[1],SFM_READ,&info);
-  
-  info_out.samplerate=OUTPUT_SAMPLERATE;
+  if (optind >= argc) {
+    fprintf(stderr, "Usage:\t%s [-q] [-r sample_rate] [-d device | -w out.wav] in.wav\n", argv[0]);
+    return 1;
+  } else strcpy(infile, argv[optind]);
+
+  if (!quiet)
+    fprintf(stderr,"Playing:\t%s\nOutput:\t\t%s\nSample rate:\t%d\n", infile, output, rate);
+
+  soundfile=sf_open(infile,SFM_READ,&info);
+
+  info_out.samplerate=rate;
   info_out.channels=1;
   info_out.format=SF_FORMAT_PCM_16|SF_FORMAT_WAV;
 
-  if (argc==3) {
-    soundfile_out=sf_open(argv[2],SFM_WRITE,&info_out);
+  if (strlen(outfile) > 1) {
+    soundfile_out=sf_open(outfile,SFM_WRITE,&info_out);
 
     if ((soundfile==NULL) || (soundfile_out==NULL)) {
       fprintf(stderr,"Couldn't open that file. Sorry.\n");
@@ -89,15 +117,15 @@ int main(int argc, char **argv) {
   } else { // we're not writing an output file, try serial I/O
 
     // blocking I/O blocks forever on open(), dunno why.
-    ttyfd = open(SERIAL_DEVICE, O_RDWR|O_NOCTTY|O_NONBLOCK);
-    if (ttyfd <0) {perror(SERIAL_DEVICE); exit(-1); }
+    ttyfd = open(device, O_RDWR|O_NOCTTY|O_NONBLOCK);
+    if (ttyfd <0) {perror(device); exit(-1); }
     tcgetattr(ttyfd,&oldtio); /* save current serial port settings */
     bzero(&newtio, sizeof(newtio)); /* clear struct for new port settings */
     
     cfmakeraw(&newtio);
-    if (0!=cfsetospeed(&newtio,SERIAL_BAUDRATE)) { perror(SERIAL_DEVICE); exit(-1); }
-    if (0!=tcflush(ttyfd, TCIFLUSH)) { perror(SERIAL_DEVICE); exit(-1); }
-    if (0!=tcsetattr(ttyfd,TCSANOW,&newtio)) { perror(SERIAL_DEVICE); exit(-1); }
+    if (0!=cfsetospeed(&newtio,SERIAL_BAUDRATE)) { perror(device); exit(-1); }
+    if (0!=tcflush(ttyfd, TCIFLUSH)) { perror(device); exit(-1); }
+    if (0!=tcsetattr(ttyfd,TCSANOW,&newtio)) { perror(device); exit(-1); }
   }
   
   samplerate=src_new(SRC_LINEAR,1,&error);
@@ -122,10 +150,10 @@ int main(int argc, char **argv) {
   resample_data.output_frames=(int)2*BAUDRATE*SOUND_BUFFER_LEN;
 
   resample_data_out.data_in=(float *)malloc(2*BAUDRATE*sizeof(float));
-  resample_data_out.data_out=(float *)malloc(2*(int)(SOUND_BUFFER_LEN*OUTPUT_SAMPLERATE)*sizeof(float));
-  resample_data_out.src_ratio=((float)OUTPUT_SAMPLERATE)/((float)BAUDRATE);
+  resample_data_out.data_out=(float *)malloc(2*(int)(SOUND_BUFFER_LEN*rate)*sizeof(float));
+  resample_data_out.src_ratio=((float)rate)/((float)BAUDRATE);
   resample_data_out.end_of_input=0;
-  resample_data_out.output_frames=(int)(2*OUTPUT_SAMPLERATE*SOUND_BUFFER_LEN);
+  resample_data_out.output_frames=(int)(2*rate*SOUND_BUFFER_LEN);
 
   k=0;
 

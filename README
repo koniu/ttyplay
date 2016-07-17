@@ -1,0 +1,56 @@
+ttyplay -- play audio files out of the serial port.
+
+INSTALLATION
+------------
+To compile, install libsndfile and libsamplerate.  Your Linux
+distribution may have packaged them for you.  Make sure to also
+install libsndfile-devel and libsamplerate-devel.
+
+Then type 'make'.
+
+USAGE
+-----
+The ttyplay executable takes the name of a .wav file and plays it over 
+/dev/ttyS0.  You can also supply the name of a second wav file and it
+will write the simulated output to that file.
+
+Audio will appear between TX (DB9 pin 3) and GND (DB9 pin 1) on the
+first serial port.  An RC filter will help remove noise, but is not
+necessary for legibile sound.
+
+You can change the baud rate in the source code.  Default is 115200.
+Generally, higher baud rates sound better.  My laptop supports up to
+460800 baud.
+
+THEORY
+------
+
+The input audio is first resampled to the baud rate of the serial port.
+
+Then, a sigma-delta modulator modifies the audio samples into
+a binary bitstream.  This modulator has been modified to take into
+account the start and stop bits of the serial bitstream.  These are
+within the feedback loop, so their error is minimized / noise shaped.
+
+Finally, the computed bytes are written to the serial port.
+
+SPECIAL CONSIDERATIONS
+----------------------
+This hack depends on the serial port transmitting bytes "back to
+back".  On a slow system with high baudrates, this may not be the
+case.  
+
+Do not connect headphones to the output if you value your hearing.
+
+A loudspeaker presents a pretty heavy load to the serial driver.  I
+haven't blown my serial port up, but I'm not responsible if you kill
+yours.  It would be better to connect to the input of an amplifier,
+but keep the volume down.
+
+If a headache develops, discontiue use.
+
+Good luck.
+
+Mark
+markrages@gmail
+10/22/2005
